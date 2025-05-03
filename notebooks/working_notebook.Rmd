@@ -1,0 +1,104 @@
+---
+title: 'Working Notebook: Emergency Fund Modeling with NFCS Data'
+author: "Donnie Minnick"
+output:
+  html_document:
+    df_print: paged
+---
+
+# Project Overview
+
+This project uses data from the 2021 National Financial Capability Study (NFCS) to model the likelihood that an individual has an emergency fund covering at least three months of expenses. The goal is to identify key financial, behavioral, and demographic predictors of short-term financial resilience.
+
+Understanding which populations are more or less financially prepared can inform policy decisions, financial education programs, and outreach strategies—particularly in light of rising economic uncertainty and inflation.
+
+# Objective
+
+To build a logistic regression model that predicts whether an individual has an emergency fund based on their income, education, debt levels, budgeting behaviors, and other personal characteristics.
+
+# Key Questions
+
+- Which personal and financial factors are most predictive of emergency fund adequacy?
+- How do budgeting behaviors and financial habits affect preparedness?
+- Are certain demographic or income groups disproportionately unprepared?
+- Can we classify individuals into "prepared" vs. "unprepared" categories with useful accuracy?
+
+# Hypotheses
+
+## Hypothesis 1: Income and Education
+
+**Claim:** Higher income and education levels increase the likelihood of having emergency savings.
+
+* **$H_0$:** There is no association betwee income and education levels and the likelihood of having a three-month emergency fund.
+
+* **$H_1$:** Higher income and education levels are positively associated with the likelihood of having a three-month emergency fund.
+
+## Hypothesis 2: Financial Behaviors
+
+**Claim:** Positive financial behaviors, like budgeting and regular saving, are strongly associated with preparedness.
+
+* **$H_0$:** Budgeting, tracking spending, and saving regularly are not associated with emergency fund adequency.
+
+* **$H_1$:** Positive financial behaviors are positively associated with having emergency savings.
+
+## Hypothesis 3: Financial Strain
+
+**Claim:** Financial strain indicators reduce the probability of having a three-month cushion.
+
+* **$H_0$:** Indicators, such as missed bills, credit card debt, or other financial difficulty are not associated with emergency fund status.
+
+* **$H_1$:** Financial strain is negatively associated with the likelihood of having emergency savings.
+
+# Proposed Model Structure
+
+## Model Type
+
+Logistic Regression, Linear Regression
+
+## Candidate Target Variable
+
+- Emergency Fund Adequacy
+
+## Candidate Predictors
+
+- Income
+- Education, 
+- Debt level, 
+- Budgeting behaviors, and 
+- Other personal characteristics, e.g. children, married versus single.
+
+# FINRA Foundation National Financial Capability Study (NFCS)
+
+I will use data from the National Financial Capability Study (NFCS), developed by the FINRA Foundation, for this project.  The NFCS is a triennial survey that examines the financial knowledge, behaviors, and well-being of U.S. adults. It provides data to help policymakers and researchers understand household financial conditions across the country.  [This link](https://www.finrafoundation.org/gauging-state-financial-capability-us) provides more information about the study.
+
+## NFCS Data
+
+FINRA provides an overview of how to use the NFCS data [here](https://www.finrafoundation.org/using-nfcs-data).
+
+NFCS provides state-by-State survey reports, datasets, questionnaires, and methodological documents are for 2009, 2012, 2015, 2018 and 2021. A tracking data that merges state-by-state survey data from 2009-2021 is also available for download. The 2021 NFCS also includes two supplemental datasets: Puerto Rico Sample and Asian American Oversample.
+
+Data downloads are available for all surveys [here](https://www.finrafoundation.org/data-and-downloads).
+
+For this project, I will use the 2021 NFCS State-by-State Survey data, which examines the financial capability of over 25,000 U.S adults across the nation, reaching at least 500 individuals per state, plus the District of Columbia.
+
+## 2021 Survey Data
+
+The downloaded data and data information, contains six files in a zip file saved to the `./reference` project folder.
+
+| File Name                                 | Description                            |
+| ----------------------------------------- | -------------------------------------- |
+| NFCS 2021 State Data 220627.csv           | Survey data in CSV format              |
+| NFCS 2021 State Data 220627.dat           | Survey data in DAT format              |
+| NFCS 2021 State Data 220627.sav           | Survey data in SAV format              |
+| NFCS 2021 State Data File Info 220627.pdf | Data dictionary for the data files     |
+| NFCS 2021 State by State Meth.pdf         | Summary of data collection methodology |
+| NFCS 2021 State by State QRE.pdf          | Survey questionnaire                   |
+
+I copied the CSV file to the `./data-raw` folder and setup an R script (saved to the `./data` folder) to get a look at it.
+
+# Github Repository
+
+Before I get further into this work, I setup a local git repository and 
+
+
+
