@@ -98,7 +98,41 @@ I copied the CSV file to the `./data-raw` folder and setup an R script (saved to
 
 # Github Repository
 
-Before I get further into this work, I setup a local git repository and 
+Before I get further into this work, I setup a [Github repository](https://github.com/dtminnick/emergency-fund-model-nfcs) and cloned it to a local R project for version control and redundancy.
+
+The data files in the zip file I downloaded from the FINRA site are large, so I extracted the survey reference PDF files to the `./reference` folder and added the zip file to `.gitignore` to avoid synching the data files.
+
+## Folder Structure
+
+I setup the following folder structure to keep the project files organized.
+
+| Folder                           | Description                                                             |
+| -------------------------------- | ----------------------------------------------------------------------- |
+| emergency-fund-model-nfcs (root) | Top-level folder; contains README, project file, .gitignore, subfolders |
+| data                             | Contains cleaned and transformed survey data                            |
+| data-raw                         | Contains R script used to clean and transform survey data               |
+| notebooks                        | Contains working and final analysis notebooks                           |
+| reference                        | Contains reference information that aids analysis                       |
+
+# Initial Data Review
+
+File contains 126 variables for 27,118 observations.  Saved uncleaned and untransformed data as `source.Rdata` in the `./data` folder.
+
+To view the structure: 
+
+```{r}
+load("./data/source.Rdata")
+
+str(source)
+```
+
+All integer values and codes for each variable, first column NFCSID appears to be a unique identifier for each observation, next column STATEQ appears to identify the state in which the respondent resides.  Will print and review the data dictionary to understand each variable, rename to user-friendly names, and transform data where needed.
+
+Will take the opportunity to also evaluate which variables might be included in model as response and regressors.
+
+Will also review survey methodology to get perspective on how data collection was done; this may inform selection of variables.
+
+Note, can also run stepwise variable selection (forward, backward and exhaustive) to inform decision on model structure.
 
 
 
