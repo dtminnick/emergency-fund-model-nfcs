@@ -1845,6 +1845,32 @@ subfolders</td>
 </table>
 </div>
 </div>
+<div id="initial-data-review" class="section level1">
+<h1>Initial Data Review</h1>
+<p>File contains 126 variables for 27,118 observations. Saved uncleaned
+and untransformed data as <code>source.Rdata</code> in the
+<code>./data</code> folder.</p>
+<p>To view the structure:</p>
+<pre class="r"><code># load(&quot;./data/source.Rdata&quot;)
+
+str(source)</code></pre>
+<pre><code>## function (file, local = FALSE, echo = verbose, print.eval = echo, exprs, 
+##     spaced = use_file, verbose = getOption(&quot;verbose&quot;), prompt.echo = getOption(&quot;prompt&quot;), 
+##     max.deparse.length = 150, width.cutoff = 60L, deparseCtrl = &quot;showAttributes&quot;, 
+##     chdir = FALSE, catch.aborts = FALSE, encoding = getOption(&quot;encoding&quot;), 
+##     continue.echo = getOption(&quot;continue&quot;), skip.echo = 0, keep.source = getOption(&quot;keep.source&quot;))</code></pre>
+<p>All integer values and codes for each variable, first column NFCSID
+appears to be a unique identifier for each observation, next column
+STATEQ appears to identify the state in which the respondent resides.
+Will print and review the data dictionary to understand each variable,
+rename to user-friendly names, and transform data where needed.</p>
+<p>Will take the opportunity to also evaluate which variables might be
+included in model as response and regressors.</p>
+<p>Will also review survey methodology to get perspective on how data
+collection was done; this may inform selection of variables.</p>
+<p>Note, can also run stepwise variable selection (forward, backward and
+exhaustive) to inform decision on model structure.</p>
+</div>
 
 
 

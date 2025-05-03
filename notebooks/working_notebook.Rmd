@@ -121,7 +121,7 @@ File contains 126 variables for 27,118 observations.  Saved uncleaned and untran
 To view the structure: 
 
 ```{r}
-load("./data/source.Rdata")
+# load("./data/source.Rdata")
 
 str(source)
 ```
