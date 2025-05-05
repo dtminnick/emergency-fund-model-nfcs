@@ -11,11 +11,11 @@ if(any(installed_packages == FALSE)) {
 
 invisible(lapply(packages, library, character.only = TRUE))
 
-source <- read.csv("./data-raw/NFCS 2021 State Data 220627.csv",
+nfcs_raw_data <- read.csv("./data-raw/NFCS 2021 State Data 220627.csv",
                    header = TRUE,
                    sep = ",",
                    na.strings = c(""),
                    stringsAsFactors = FALSE)
 
-save(source, file = "./data/source.Rdata")
+save(nfcs_raw_data, file = "./data/nfcs_raw_data.Rdata")
 
