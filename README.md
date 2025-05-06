@@ -22,3 +22,13 @@ To build a logistic regression model that predicts whether an individual has an 
 1. Higher income and education levels increase the likelihood of having emergency savings.
 2. Positive financial behaviors, like budgeting and regular saving, are strongly associated with preparedness.
 3. Indicators of financial strain, e.g. missed bills, credit card debt, reduce the probability of having a 3-month cushion.
+
+## Project Structure
+
+Organized the project into five R notebooks covering:
+
+1. Project overview,
+2. Data load and transformation,
+3. Exploratory data analysis,
+4. Modeling, and
+5. Reporting and visualizations.
