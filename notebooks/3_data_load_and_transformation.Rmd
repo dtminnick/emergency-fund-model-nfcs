@@ -1,0 +1,139 @@
+---
+title: 'Emergency Fund Modeling with NFCS Data: Data Load and Transformation'
+author: "Donnie Minnick"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r}
+library("dplyr")
+library("tidyr")
+load("../data/nfcs_raw_data.Rdata")
+```
+
+# Initial Data Review
+
+File contains 126 variables for 27,118 observations.  Saved uncleaned and untransformed data as `nfcs_raw_data.Rdata` in the `./data` folder.
+
+To view the structure: 
+
+```{r}
+str(nfcs_raw_data)
+```
+
+All integer values and codes for each variable, first column NFCSID appears to be a unique identifier for each observation, next column STATEQ appears to identify the state in which the respondent resides.  Will print and review the data dictionary to understand each variable, rename to user-friendly names, and transform data where needed.
+
+Will take the opportunity to also evaluate which variables might be included in model as response and regressors.
+
+Will also review survey methodology to get perspective on how data collection was done; this may inform selection of variables.
+
+Note, can also run stepwise variable selection (forward, backward and exhaustive) to inform decision on model structure.
+
+## Response Variable
+
+Based on my initial review, one variable stands out as a candidate response variable.  Coded as `J5` in the dataset, this variable captures respondent answer to the question, "Have you set aside emergency or rainy day funds that would cover your expenses for 3 months, in case of sickness, job loss, economic downturn, or other emergencies?"
+
+Allowable responses are: 1 = Yes, 2 = No, 98 = Don't Know, and 99 = Prefer Not to Say.
+
+Not sure how a respondent would not know this, and if a respondent did not provide a Yes/No response, presumably I would need to exclude these observations.
+
+Here's how the responses breakdown:
+
+```{r}
+j5 <- nfcs_raw_data %>%
+  select(J5) %>%
+  group_by(J5) %>%
+  summarise(responses = n()) %>%
+  arrange(desc(responses)) %>%
+  mutate(percent = round(responses / sum(responses), 2)); j5
+```
+
+95% percent of responses are either `Yes` (1) or `No` (2), 3% are `Don't Know` (98) and 1% are `Prefer Not to Say` (99).
+
+I will predict the binary outcome, i.e. whether an individual has an emergency fund (Yes = 1).
+
+Given the binary classification, I propose to start with a logistic regression model over other potential models, e.g. Random Forest, XGBoost, etc.  It's a relatively simple model that is interpretable and may be sufficient to capture the relationship between response and regressors.  If not, then I can move on to other models.
+
+## Variable Selection
+
+With 126 variables, I need to take a structured approach to variable selection.
+
+Initial thoughts:
+
+* Start with domain relevance, and manually prefilter variables based on my experience in the retirement industry, with goal of tagging variables that logically influence emergency savings to get from 126 variables to ~30-40.
+* Address missing data.  As I scanned the dataset, I noticed a lot of NAs.  I should consider dropping variables with more than 30-40% missing values, unless they are critical to analysis.  If so, I can consider imputation.
+* Eliminate low-variance features, e.g. 95% of values in a single category.
+* There aren't any open-text responses in this data, but there are multi-categorical data points with levels.  Evaluate and consider dropping these.
+* Once I have a more manageable number of variables, check for multicollinearity to reduce redundancy and drop variables with correlation greater than 0.7 or VIF greater than 4.
+* Use stepwise variable selection to optimize the variable subset.
+
+Realistically, I need to get to 5-8 regressors I can use to predict the response variable.
+
+
+
+# Data Categories
+
+Before I get to variable selection, I thought it would be helpful to categorize the variables into groups.  This may guide the variable selection process.
+
+
+
+# Manual Variable Prefilter
+
+# Financial Literacy Score
+
+There are seven questions at the end of the survey that, taken together, are essentially a set of quiz questions that objectively test a respondent's financial literacy.  Each question has a correct response and they can be used to create a financial literacy score by summing up the correct reponses.
+
+## Financial Literacy Questions
+
+The quiz questions - and the concept each addresses - are:
+
+* `M6` - Interest calculation,
+* `M7` - Inflation,
+* `M8` - Bond prices versus interest rates,
+* `M31` - Compound interest,
+* `M50` - Probability, 
+* `M9` - Mortgage terms, and 
+* `M10` - Risk diversification.
+
+## Potential Benefit
+
+This score provides a quantitative, objective measure of financial literacy, unlike respondent perceived confidence or satisfaction.  It adds explanatory to the emergency fund model as people with more financial knowledge are more likely to budget, save, avoid debt and prepare for emergencies.
+
+## Implementation Considerations
+
+To engineer the financial literacy score feature, I would do the following:
+
+1. Identify non-responses, e.g. Don't Know, Prefer Not to Say, and remove these.
+2. Identify the correct response for each question.
+3. Create binary variables for each question and combine them into a financial literacy score.  This can be done by coding the binary values as '1' for a correct response and '0' for an incorrect response.
+
+Handling missing or skipped answers can be dealt with as follows:
+
+* Treat NA as '0' (assume no credit for unanswered questions),
+* Track only total items answered, or
+* Only compute a score if 5 or more questions are answered.
+
+To normalize the score, I can create a 0-1 scaled score or use a percentage.
+
+## Data Analysis of Financial Literacy Responses
+
+```{r}
+flr <- nfcs_raw_data %>%
+  select(M6, M7, M8, M31, M50, M9, M10) %>%
+  tidyr::pivot_longer(everything(),
+                      names_to = "question",
+                      values_to = "response") %>%
+  group_by(question, response) %>%
+  summarise(responses = n()) %>%
+  pivot_wider(names_from = response,
+              values_from = responses) %>%
+  select(question, '1', '2', '3', '4', '98', '99'); flr
+```
+
+Response 98 is the same as a zero response, but 99 (prefer not to say) can't reliably be intepreted as an incorrect response.  May need to put these aside.
+
+
+
+

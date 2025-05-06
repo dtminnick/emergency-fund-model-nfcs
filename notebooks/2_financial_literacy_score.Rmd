@@ -1,0 +1,164 @@
+---
+title: 'Emergency Fund Modeling with NFCS Data: Financial Literacy Score'
+author: "Donnie Minnick"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r}
+library("dplyr")
+library("tidyr")
+load("../data/nfcs_raw_data.Rdata")
+```
+
+# Financial Literacy Score
+
+There are seven questions at the end of the survey that, taken together, are essentially a set of quiz questions that objectively test a respondent's financial literacy.  Each question has a correct response and they can be used to create a financial literacy score by summing up the correct reponses.
+
+# Financial Literacy Questions
+
+Correct responses below signified by (*).
+
+## Interest Calculation (M6)
+
+Suppose you had $100 in a savings account and the interest rate was 2% per year. After 5 years, how much do you think you would have in the account if you left the money to grow?
+
+1. More than $102 (*)
+2. Exactly $102
+3. Less than $102
+98. Don't know
+99. Prefer not to say
+
+## Inflation (M7)
+
+Imagine that the interest rate on your savings account was 1% per year and inflation was 2% per year. After 1 year, how much would you be able to buy with the money in this account?
+
+1. More than today
+2. Exactly the same
+3. Less than today (*)
+98. Don't know
+99. Prefer not to say
+
+## Bond Prices Versus Interest Rates (M8)
+
+If interest rates rise, what will typically happen to bond prices?
+
+1. They will rise
+2. They will fall (*)
+3. They will stay the same
+4. There is no relationship between bond prices and the interes
+98. Don't know
+99. Prefer not to say
+
+## Compound Interest (M31)
+
+Suppose you owe $1,000 on a loan and the interest rate you are charged is 20% per year compounded annually. If you didn't pay anything off, at this interest rate, how many years would it take for the amount you owe to double?
+
+1. Less than 2 years
+2. At least 2 years but less than 5 years (*)
+3. At least 5 years but less than 10 years
+4. At least 10 years
+98. Don't know
+99. Prefer not to say
+
+## Probability (M50)
+
+Which of the following indicates the highest probability of getting a particular disease?
+
+1. There is a one-in-twenty chance of getting the disease (*)
+2. 2% of the population will get the disease
+3. 25 out of every 1,000 people will get the disease
+98. Don't know
+99. Prefer not to say
+
+## Mortgage Terms (M9)
+
+A 15-year mortgage typically requires higher monthly payments than a 30-year mortgage, but the total interest paid over the life of the loan will be less.
+
+1. True (*)
+2. False
+98. Don't know
+99. Prefer not to say
+
+## Risk Diversification (M10)
+
+Buying a single company's stock usually provides a safer return than a stock mutual fund.
+
+1. True
+2. False (*)
+98. Don't know
+99. Prefer not to say
+
+# Potential Benefit
+
+A score based on these variables provides a quantitative, objective measure of financial literacy, unlike respondent perceived confidence or satisfaction.  It adds explanatory to the emergency fund model as people with more financial knowledge are more likely to budget, save, avoid debt and prepare for emergencies.
+
+# Prevalence of Non-Responses
+
+I need to assess the prevalence of non-responses, i.e. Don't Know (98) and Prefer Not to Say (99) in the dataset to develop a strategy to deal with them.
+
+```{r}
+summary_by_question <- nfcs_raw_data %>%
+  select(M6, M7, M8, M9, M10, M31, M50) %>%
+  pivot_longer(cols = everything(), 
+               names_to = "question", 
+               values_to = "response") %>%
+  mutate(type = case_when(response %in% c(98, 99) ~ "non-response",
+                          TRUE ~ "valid")) %>%
+  group_by(question, type) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  group_by(question) %>%
+  mutate(total = sum(count),
+         percent = round(100 * count / total, 1)) %>%
+  pivot_wider(names_from = type,
+              values_from = c(count, percent),
+              names_glue = "{type}_{.value}",
+              values_fill = 0) %>%
+  arrange(question)
+
+summary_by_question
+```
+
+This summary gives a clear picture of how much missingness (non-responses via 98 and 99) exist for each question.  Two variables, M8 and M10, have a very high non-response; there is a risk of biased results of included without adjustment.
+
+M7, M31 and M50 have a moderate non-response in the range of 23-33%, which is potentially tolerable with sensitivity checks.
+
+M6 and M9 have a reasonable retention of data even if I chose to exclude 98 and 99 responses, and M^ has the lowest non-response at 15%.
+
+# Proposed Strategy
+
+Count 98 responses as incorrect, since it's clear "Don't Know" reflectss a lack of financial literacy, and it is reasonable to conclude it as an incorrect response.
+
+Exclude 99 responses from scoring, since "Prefer not to answer" may reflect a non-engagement or privacy concern, and not necessarily knowledge.  Given that 99's are a small subset, excluding them avoid misclassifying intent and doesn't hurt power.
+
+Including 98 responses as incorrect inflates the “incorrect” rate, especially for M10 and M8. This could artificially lower literacy scores for respondents who may be simply opting out or unsure, not necessarily uninformed.
+
+# Impacts on a Financial Literacy Score
+
+The proposed strategy will result in more people receiving lower scores.  Since 98s will be treated as incorrect, respondents with even partial uncertainty will get lower scores.
+
+This shifts the distribution left (lower average score), especially on questions with high 98 rates like M10, M8, M50.
+
+Missing data increases, because respondents with one or more 99s will now have partially missing FL scores.
+
+To compute a total score, I need to decide:
+
+* Do you allow scores with fewer than 7 answered questions?
+* Do you rescale (e.g., percent correct of attempted questions)?
+* Or exclude them from scoring?
+
+Score interpretation becomes nuanced.  For example, a score of 4/7 might mean 3 wrong, or 2 wrong + 1 99 excluded.
+
+I'll include both a raw score out of 7 and an adjusted score based on percent correct of valid responses (e.g., 4 out of 6 answered = 66.7%).
+
+To ensure consistency, I'll define a function to take the responses as inputs and return the raw and adjusted scores for analysis.
+
+
+
+
+
+
+
+
