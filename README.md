@@ -25,10 +25,11 @@ To build a logistic regression model that predicts whether an individual has an 
 
 ## Project Structure
 
-Organized the project into five R notebooks covering:
+Organized the project into six R notebooks covering:
 
 1. Project overview,
-2. Data load and transformation,
-3. Exploratory data analysis,
-4. Modeling, and
-5. Reporting and visualizations.
+2. Financial literacy score,
+3. Data load and transformation,
+4. Exploratory data analysis,
+5. Modeling, and
+6. Reporting and visualizations.
