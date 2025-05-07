@@ -15,7 +15,9 @@ load("../data/nfcs_raw_data.Rdata")
 
 # Financial Literacy Score
 
-There are seven questions at the end of the survey that, taken together, are essentially a set of quiz questions that objectively test a respondent's financial literacy.  Each question has a correct response and they can be used to create a financial literacy score by summing up the correct reponses.
+There are seven questions at the end of the NFCS survey that, taken together, are essentially a set of quiz questions that test a respondent's financial literacy.  Each question has a correct response and they can be used to create a financial literacy score.
+
+A score based on these variables provides a quantitative, objective measure of financial literacy, unlike respondent perceived confidence or satisfaction.  It adds explanatory to the emergency fund model as people with more financial knowledge are more likely to budget, save, avoid debt and prepare for emergencies.
 
 # Financial Literacy Questions
 
@@ -91,9 +93,9 @@ Buying a single company's stock usually provides a safer return than a stock mut
 98. Don't know
 99. Prefer not to say
 
-# Potential Benefit
+# Financial Literacy Score
 
-A score based on these variables provides a quantitative, objective measure of financial literacy, unlike respondent perceived confidence or satisfaction.  It adds explanatory to the emergency fund model as people with more financial knowledge are more likely to budget, save, avoid debt and prepare for emergencies.
+I implemented a `get_fl_score` function implements a financial literacy scoring strategy by comparing a respondent’s answers to seven predefined correct responses. It excludes any answers marked as "Prefer not to say" (99), ensuring these are not counted against the respondent. All other responses—including "Don't know" (98)—are treated as incorrect. The function calculates both a raw score (number of correct answers) and a percent score (correct answers divided by the number of valid responses), allowing for fair comparisons even when some questions are skipped. This approach balances accuracy with sensitivity to partial non-responses.
 
 # Prevalence of Non-Responses
 
@@ -155,7 +157,70 @@ I'll include both a raw score out of 7 and an adjusted score based on percent co
 
 To ensure consistency, I'll define a function to take the responses as inputs and return the raw and adjusted scores for analysis.
 
+```{r}
+source("../R/get_fl_score.R")
 
+fl_responses <- nfcs_raw_data %>%
+  select(M6, M7, M8, M31, M50, M9, M10) %>%
+  rowwise() %>%
+  mutate(fl_score_raw = as.integer(get_fl_score(M6, M7, M8, M31, M50, M9, M10)$raw_score),
+         fl_score_pct = as.numeric(get_fl_score(M6, M7, M8, M31, M50, M9, M10)$percent_score),
+         fl_score_nml = as.numeric(get_fl_score(M6, M7, M8, M31, M50, M9, M10)$normalized_score),
+         fl_questions_answered = as.numeric(get_fl_score(M6, M7, M8, M31, M50, M9, M10)$questions_answered))
+
+head(fl_responses, 5)
+```
+
+Summary statistics of raw score.
+
+```{r}
+summary(fl_responses$fl_score_nml)
+```
+
+Summary statistics of percent score.
+
+```{r}
+summary(fl_responses$fl_score_nml)
+```
+
+The 45 instances of NA are surveys in which the respondent responded with 99 for all quiz questions.
+
+I wonder how these respondents completed the survey as a whole?
+
+I also have a concern that there are instances in which a respondent provided 99 for a number of quiz questions, completed one with a correct answer, and they have a raw score of and a percent score of 100.  The percent score in these instances is misleading and not a reliable indicator of financial literacy.
+
+Let me see what this looks like.
+
+```{r}
+check <- fl_responses %>%
+  group_by(fl_score_raw, fl_score_pct, fl_score_nml) %>%
+  summarise(respondents = n())
+```
+
+These are not errors per se.  They occur when someone answered only one question, and it was correct. Mathematically valid, but interpretively misleading if not caveated.
+
+
+
+Generate plots to show the distribution of raw and percent scores.
+
+```{r}
+library(ggplot2)
+library(patchwork)  # install.packages("patchwork") if needed
+
+p1 <- ggplot(fl_responses, aes(x = fl_score_nml)) +
+  geom_histogram(binwidth = 7, fill = "steelblue", color = "white") +
+  labs(title = "Distribution of Raw Scores", x = "Raw Score", y = "Count") +
+  theme_minimal()
+
+p2 <- ggplot(fl_responses, aes(x = fl_score_pct)) +
+  geom_histogram(binwidth = 7, fill = "darkgreen", color = "white") +
+  labs(title = "Distribution of Percent Scores", x = "Percent Score", y = "Count") +
+  theme_minimal()
+
+p1 + p2  # display side by side
+```
+
+This looks normally distributed.
 
 
 
