@@ -7,25 +7,33 @@ output:
     df_print: paged
 ---
 
-```{r}
+```{r, message = FALSE}
 library("dplyr")
+library("ggplot2")
+library("knitr")
 library("tidyr")
+
+source("../R/get_fl_score.R")
+
 load("../data/nfcs_raw_data.Rdata")
 ```
 
 # Financial Literacy Score
 
-There are seven questions at the end of the NFCS survey that, taken together, are essentially a set of quiz questions that test a respondent's financial literacy.  Each question has a correct response and they can be used to create a financial literacy score.
+The NFCS survey contains a set of quiz questions that test a respondent's financial literacy.  
+Each question has a correct response and they can be used to create a composite financial literacy score.
 
-A score based on these variables provides a quantitative, objective measure of financial literacy, unlike respondent perceived confidence or satisfaction.  It adds explanatory to the emergency fund model as people with more financial knowledge are more likely to budget, save, avoid debt and prepare for emergencies.
+A score based on these variables provides a quantitative, objective measure of financial literacy.  
+It adds explanatory to the emergency fund model as people with more financial knowledge are more likely to budget, save, avoid debt and prepare for emergencies.
 
-# Financial Literacy Questions
+# Survey Questions
 
 Correct responses below signified by (*).
 
 ## Interest Calculation (M6)
 
-Suppose you had $100 in a savings account and the interest rate was 2% per year. After 5 years, how much do you think you would have in the account if you left the money to grow?
+Suppose you had $100 in a savings account and the interest rate was 2% per year. After 5 years, 
+how much do you think you would have in the account if you left the money to grow?
 
 1. More than $102 (*)
 2. Exactly $102
@@ -35,7 +43,8 @@ Suppose you had $100 in a savings account and the interest rate was 2% per year.
 
 ## Inflation (M7)
 
-Imagine that the interest rate on your savings account was 1% per year and inflation was 2% per year. After 1 year, how much would you be able to buy with the money in this account?
+Imagine that the interest rate on your savings account was 1% per year and inflation was 2% per year. 
+After 1 year, how much would you be able to buy with the money in this account?
 
 1. More than today
 2. Exactly the same
@@ -56,7 +65,8 @@ If interest rates rise, what will typically happen to bond prices?
 
 ## Compound Interest (M31)
 
-Suppose you owe $1,000 on a loan and the interest rate you are charged is 20% per year compounded annually. If you didn't pay anything off, at this interest rate, how many years would it take for the amount you owe to double?
+Suppose you owe $1,000 on a loan and the interest rate you are charged is 20% per year compounded annually. 
+If you didn't pay anything off, at this interest rate, how many years would it take for the amount you owe to double?
 
 1. Less than 2 years
 2. At least 2 years but less than 5 years (*)
@@ -77,7 +87,8 @@ Which of the following indicates the highest probability of getting a particular
 
 ## Mortgage Terms (M9)
 
-A 15-year mortgage typically requires higher monthly payments than a 30-year mortgage, but the total interest paid over the life of the loan will be less.
+A 15-year mortgage typically requires higher monthly payments than a 30-year mortgage, but the 
+total interest paid over the life of the loan will be less.
 
 1. True (*)
 2. False
@@ -93,24 +104,23 @@ Buying a single company's stock usually provides a safer return than a stock mut
 98. Don't know
 99. Prefer not to say
 
-# Financial Literacy Score
-
-I implemented a `get_fl_score` function implements a financial literacy scoring strategy by comparing a respondent’s answers to seven predefined correct responses. It excludes any answers marked as "Prefer not to say" (99), ensuring these are not counted against the respondent. All other responses—including "Don't know" (98)—are treated as incorrect. The function calculates both a raw score (number of correct answers) and a percent score (correct answers divided by the number of valid responses), allowing for fair comparisons even when some questions are skipped. This approach balances accuracy with sensitivity to partial non-responses.
-
 # Prevalence of Non-Responses
 
-I need to assess the prevalence of non-responses, i.e. Don't Know (98) and Prefer Not to Say (99) in the dataset to develop a strategy to deal with them.
+The following table provides a clear picture of how much 'missingness' - non-responses via 
+"Don't know" (98) and "Prefer not to say" (99) - exists for each question.  
 
 ```{r}
 summary_by_question <- nfcs_raw_data %>%
-  select(M6, M7, M8, M9, M10, M31, M50) %>%
+  select(M6, M7, M8, M31, M50, M9, M10) %>%
   pivot_longer(cols = everything(), 
                names_to = "question", 
                values_to = "response") %>%
   mutate(type = case_when(response %in% c(98, 99) ~ "non-response",
                           TRUE ~ "valid")) %>%
-  group_by(question, type) %>%
-  summarise(count = n(), .groups = "drop") %>%
+  group_by(question, 
+           type) %>%
+  summarise(count = n(), 
+            .groups = "drop") %>%
   group_by(question) %>%
   mutate(total = sum(count),
          percent = round(100 * count / total, 1)) %>%
@@ -120,46 +130,71 @@ summary_by_question <- nfcs_raw_data %>%
               values_fill = 0) %>%
   arrange(question)
 
-summary_by_question
+kable(summary_by_question,
+      col.names = c("Question", "Total", "Non-Response Count", "Valid Count", "Non-Response %", "Valid %"),
+      caption = "Response Summary by Question",
+      format.args = list(big.mark = ","),
+      align = c("l", "r", "r", "r", "r", "r"))
 ```
 
-This summary gives a clear picture of how much missingness (non-responses via 98 and 99) exist for each question.  Two variables, M8 and M10, have a very high non-response; there is a risk of biased results of included without adjustment.
+Two variables, M8 and M10, have a very high non-response, 40.4% and 45.3% respectively; there is a risk 
+of biased results if non-responses are included without adjustment.
 
-M7, M31 and M50 have a moderate non-response in the range of 23-33%, which is potentially tolerable with sensitivity checks.
+M7, M31 and M50 have a moderate non-response in the range of 23.1-33.4%, which is potentially tolerable with sensitivity checks.
 
-M6 and M9 have a reasonable retention of data even if I chose to exclude 98 and 99 responses, and M^ has the lowest non-response at 15%.
+M6 and M9 have a reasonable retention of data, with non-responses of 20.5% and 15.2%.
+
+M6 has the lowest non-response at 15.2%.
 
 # Proposed Strategy
 
-Count 98 responses as incorrect, since it's clear "Don't Know" reflectss a lack of financial literacy, and it is reasonable to conclude it as an incorrect response.
+To deal with this 'missingness', I propose to count "Don't know" (98) responses as incorrect, since it's 
+clear "Don't Know" reflects a lack of financial literacy; otherwise, the respondent would be provided a 
+different answer.  It is reasonable to conclude it as an incorrect response.
 
-Exclude 99 responses from scoring, since "Prefer not to answer" may reflect a non-engagement or privacy concern, and not necessarily knowledge.  Given that 99's are a small subset, excluding them avoid misclassifying intent and doesn't hurt power.
+Exclude "Prefer not to say" (99) responses from scoring, since "Prefer not to answer" may reflect a 
+non-engagement or privacy concern, and not necessarily knowledge.  Given that these responses are a 
+small subset, excluding them avoids misclassifying intent and doesn't hurt power.
 
-Including 98 responses as incorrect inflates the “incorrect” rate, especially for M10 and M8. This could artificially lower literacy scores for respondents who may be simply opting out or unsure, not necessarily uninformed.
+I will implement and evaluate percent metrics based on both the number of correct responses, excluding 99, 
+and based on the total number of survey questions, i.e. the seven quiz questions.  This approach potentially 
+avoids a situation where a respondent receives a high percent score as a result of 99 responses.  Calculating 
+both metrics provides the option to evaluate each and decide which is more appropriate during analysis.
 
 # Impacts on a Financial Literacy Score
 
-The proposed strategy will result in more people receiving lower scores.  Since 98s will be treated as incorrect, respondents with even partial uncertainty will get lower scores.
+The proposed strategy will result in more people receiving lower scores.  Since "Don't know" (98) responses 
+will be treated as incorrect, respondents with even partial uncertainty will get lower scores.
 
-This shifts the distribution left (lower average score), especially on questions with high 98 rates like M10, M8, M50.
+This shifts the distribution left (lower average score), especially on questions with high "Don't know (98) rates like M10, M8, M50.
 
-Missing data increases, because respondents with one or more 99s will now have partially missing FL scores.
+# get_fl_score Function
 
-To compute a total score, I need to decide:
+I implemented a `get_fl_score` function to create a composite score using the survey responses.
 
-* Do you allow scores with fewer than 7 answered questions?
-* Do you rescale (e.g., percent correct of attempted questions)?
-* Or exclude them from scoring?
+The function returns a list with four values:
 
-Score interpretation becomes nuanced.  For example, a score of 4/7 might mean 3 wrong, or 2 wrong + 1 99 excluded.
+* `raw_score` returns number of correct responses; it excludes both "Don't know" (98) and "Prefer not to say" (98),
+* `percent_score` returns percent of correct responses, excluding answers marked as "Prefer not to say" (99),
+* `normalized_score` returns percent of correct responses using number of survey questions as the denominator, and
+* `questions_answered` returns the number of answered questions, including "Don't know" (98).
 
-I'll include both a raw score out of 7 and an adjusted score based on percent correct of valid responses (e.g., 4 out of 6 answered = 66.7%).
+The `normalized_score` corrects for situations in which a survey has a prevalence of "Prefer not to say" (99) responses.
 
-To ensure consistency, I'll define a function to take the responses as inputs and return the raw and adjusted scores for analysis.
+Here is an example that illustrates the problem with a single survey response.  In this example, a respondent 
+responds with "Prefer not to say" (99) for six of seven questions.
 
 ```{r}
-source("../R/get_fl_score.R")
+get_fl_score(1, 99, 99, 99, 99, 99, 99)
+```
 
+The `raw_score` is 1 and the `percent_score`, which excludes "Don't know" (98) and "Prefer not to say" (99) 
+responses, returns a perfect score, i.e. 1 correct response divided by 1 respond provided.  `normalized_score` 
+reflects the percent based on attempted responses, excluding "Don't know" (98) and "Prefer not to say" (99).
+
+# get_fl_score Test
+
+```{r}
 fl_responses <- nfcs_raw_data %>%
   select(M6, M7, M8, M31, M50, M9, M10) %>%
   rowwise() %>%
@@ -168,62 +203,70 @@ fl_responses <- nfcs_raw_data %>%
          fl_score_nml = as.numeric(get_fl_score(M6, M7, M8, M31, M50, M9, M10)$normalized_score),
          fl_questions_answered = as.numeric(get_fl_score(M6, M7, M8, M31, M50, M9, M10)$questions_answered))
 
-head(fl_responses, 5)
+kable(head(fl_responses, 15),
+      col.names = c("M6", "M7", "M8", "M31", "M50", "M9", "M10", "Raw Score", "% Score", "Normalized Score", "Questions Answered"),
+      caption = "Literacy Score Test Example",
+      format.args = list(big.mark = ","),
+      align = c("r", "r", "r", "r", "r", "r", "r", "r", "r", "r", "r"))
 ```
 
-Summary statistics of raw score.
+To get a better sense of the distribution of scores by type of scope, I will group respondents by score type 
+to get a sense of how misleading the percent score might be.
 
 ```{r}
-summary(fl_responses$fl_score_nml)
-```
-
-Summary statistics of percent score.
-
-```{r}
-summary(fl_responses$fl_score_nml)
-```
-
-The 45 instances of NA are surveys in which the respondent responded with 99 for all quiz questions.
-
-I wonder how these respondents completed the survey as a whole?
-
-I also have a concern that there are instances in which a respondent provided 99 for a number of quiz questions, completed one with a correct answer, and they have a raw score of and a percent score of 100.  The percent score in these instances is misleading and not a reliable indicator of financial literacy.
-
-Let me see what this looks like.
-
-```{r}
-check <- fl_responses %>%
+fl_summary <- fl_responses %>%
   group_by(fl_score_raw, fl_score_pct, fl_score_nml) %>%
   summarise(respondents = n())
+
+kable(fl_summary,
+      col.names = c("Raw Score", "% Score", "Normalized Score", "Respondents"),
+      caption = "Summary of Respondents by Grouped Scores",
+      format.args = list(big.mark = ","),
+      align = c("r", "r", "r", "r"))
 ```
 
-These are not errors per se.  They occur when someone answered only one question, and it was correct. Mathematically valid, but interpretively misleading if not caveated.
+Most respondents are answering at least some of the questions.  Only 45 respondents had all "Prefer not to say" (99) 
+responses, so most respondents are engaging with the survey on some level.
 
+Percent scores tend to cluster at whole-number raw scores with matching expected percentage scores, e.g. 0/7 = 0%, 
+1/7 ≈ 14.3%, etc. This suggests most people completed all 7 questions, or at least a consistent subset.
 
+The cases where percent scores deviate from the typical 14.3% steps, e.g. 1 correct out of 3 = 33.3%, are relatively 
+rare. This implies that skipping or “Prefer not to answer” (99) responses did not dramatically skew the data for most people.
 
-Generate plots to show the distribution of raw and percent scores.
+The largest groups of respondents scored between 2 and 5 correct answers, with fewer at the extremes. This is a 
+typical bell-shaped distribution, which is expected in general population-level financial literacy assessments.
+
+The consistent pattern between raw, percent, and normalized scores supports that this scoring logic is working 
+correctly and the data is clean and interpretable.
+
+In summary, this data confirms that the strategy for handling non-responses is not introducing distortion, and 
+it provides a nuanced view of the financial literacy levels in the sample.
+
+Here's the distribution of raw and percent scores in a plot.
 
 ```{r}
-library(ggplot2)
-library(patchwork)  # install.packages("patchwork") if needed
+fl_summary_grouped <- fl_summary %>%
+  filter(!is.na(fl_score_raw)) %>%
+  mutate(literacy_level = case_when(fl_score_raw <= 2 ~ "Low",
+                                    fl_score_raw <= 5 ~ "Medium",
+                                    fl_score_raw <= 7 ~ "High"),
+         literacy_level = factor(literacy_level, levels = c("Low", "Medium", "High")))
 
-p1 <- ggplot(fl_responses, aes(x = fl_score_nml)) +
-  geom_histogram(binwidth = 7, fill = "steelblue", color = "white") +
-  labs(title = "Distribution of Raw Scores", x = "Raw Score", y = "Count") +
-  theme_minimal()
+ggplot(fl_summary_grouped, aes(x = factor(fl_score_raw), y = respondents, fill = literacy_level)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = respondents), vjust = -0.5, size = 3.0) +
+  scale_fill_manual(values = c("Low" = "#D73027", "Medium" = "#FDAE61", "High" = "#1A9850"),
+                    name = "Literacy Level") +
+  labs(title = "Distribution of Financial Literacy Scores",
+       x = "Financial Literacy Score (Raw)",
+       y = "Number of Respondents") +
+  theme(plot.title = element_text(size = 14, face = "bold"),
+        axis.title = element_text(size = 12),
+        legend.position = "top")
 
-p2 <- ggplot(fl_responses, aes(x = fl_score_pct)) +
-  geom_histogram(binwidth = 7, fill = "darkgreen", color = "white") +
-  labs(title = "Distribution of Percent Scores", x = "Percent Score", y = "Count") +
-  theme_minimal()
-
-p1 + p2  # display side by side
 ```
 
-This looks normally distributed.
-
-
-
-
-
-
+This distribution reveals that the financial literacy score follows a roughly normal pattern, peaking around 
+scores of 3 and 4, which suggests a moderate overall level of financial literacy among respondents. The number 
+of individuals scoring at the extremes (0 or 7) is relatively low, while many fall into the middle range.
