@@ -1,0 +1,154 @@
+---
+title: 'Emergency Fund Modeling with NFCS Data: Evaluate Missing Data'
+author: "Donnie Minnick"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r, message = FALSE}
+library("dplyr")
+library("knitr")
+library("naniar")
+library("tidyr")
+library("VIM")
+load("../data/nfcs_raw_data.Rdata")
+```
+
+# Quantify Missingness by Variable
+
+```{r}
+missing_summary <- nfcs_raw_data %>%
+  summarise(across(everything(), ~ mean(is.na(.)))) %>%
+  pivot_longer(everything(), names_to = "variable", values_to = "missing_pct") %>%
+  arrange(desc(missing_pct)); missing_summary
+```
+
+```{r}
+# View top 20 most-missing variables
+head(missing_summary, 20)
+```
+
+
+# Visualize Missingness
+
+```{r}
+aggr(nfcs_raw_data, numbers = TRUE, sortVars = TRUE)
+```
+
+```{r}
+vis_miss(nfcs_raw_data)
+```
+
+# Evaluating Missingness
+
+There are three categories of missingness:
+
+1. NA values, i.e. true missingness,
+2. Don't know responses, which are coded as '98' in the dataset, and
+3. Prefer not to say responses, which are coded as '99' in the dataset.
+
+I can't impute values from these responses, except that in the case of Don't know (98), I did interpret it as an incorrect response when creating a composite score for financial literacy (see notebook `financial_literacy_score.Rmd` for details).
+
+My only viable option is to treat these non-responses and NA values as missing.
+
+# Excluding Variables Based on Missingness
+
+The question then becomes when I exclude a variable from consideration based on missingness.
+
+I propose the following thresholds:
+
+* > 50% missing, exclude the variable,
+* > 25% missing, evaluate more carefully and retain if important, and
+* < 10-20%, acceptable threshold.
+
+However, I also need to assess the information value of the high-missing variables.  If, for example, a variable with high missingness is very predictive, evaluate:
+
+* Does this variable segment the population meaningfully?
+* Is this variable crucial to the research question?
+* Can the variable be used in a subset analysis?
+
+# Non-Responses and Missing Values
+
+Summary of missingness in the `nfcs_raw_data` data frame.
+
+```{r}
+response_summary <- nfcs_raw_data %>%
+  pivot_longer(everything(), 
+               names_to = "variable", 
+               values_to = "response") %>%
+  mutate(response_type = case_when(is.na(response) ~ "missing",
+                                   response == 98 ~ "dk_98",
+                                   response == 99 ~ "pna_99",
+                                   TRUE ~ "valid")) %>%
+  group_by(variable, response_type) %>%
+  summarize(count = n(), .groups = "drop") %>%
+  group_by(variable) %>%
+  mutate(percent = round(count / sum(count), 2)) %>%
+  pivot_wider(names_from = response_type, 
+              values_from = c(count, percent), 
+              values_fill = 0) %>%
+  arrange(count_valid)
+
+kable(response_summary,
+      col.names = c("Variable", 
+                    "Count Missing", 
+                    "Count Valid",
+                    "Count 98",
+                    "Count 99",
+                    "Percent Missing",
+                    "Percent Valid",
+                    "Percent 98",
+                    "Percent 99"),
+      caption = "Response Summary by Question",
+      format.args = list(big.mark = ","),
+      align = c("l", "r", "r", "r", "r", "r", "r", "r", "r"))
+```
+
+# Greater Than 50% Missing
+
+| ------- | --------- |
+| M21_4 |
+| M21_2_2015 |
+| M21_1 |
+| M21_3 |
+| J9 |
+| G35 |
+| G22_2015 |
+| G33 |
+| E15_2015 |
+| E20 |
+| J6 |
+| C2_2012 |
+| C5_2012 |
+| C3_2012 |
+| C10_2012 |
+| C11_2012 |
+
+# Greater Than 20% Missing
+
+| ------ |
+| M10 |
+| A14 |
+| E8 |
+| A10 |
+| E7 |
+| A21_2015 |
+| M8 |
+| M10 |
+| M31 |
+| J8 |
+| F2_5 |
+| F2_2 |
+| F2_3 |
+| M7 |
+| F2_1 |
+| F2_4 |
+| F2_6 |
+
+
+
+
+
+
