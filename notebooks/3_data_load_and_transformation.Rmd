@@ -23,7 +23,24 @@ To view the structure:
 str(nfcs_raw_data)
 ```
 
-All integer values and codes for each variable, first column NFCSID appears to be a unique identifier for each observation, next column STATEQ appears to identify the state in which the respondent resides.  Will print and review the data dictionary to understand each variable, rename to user-friendly names, and transform data where needed.
+All integer values and codes for each variable.  Variables can be grouped into the following categories.
+
+# Categories
+
+1. Demographics,
+2. Employment,
+3. Income,
+4. Financial Behavior and Decision Making,
+5. Credit and Banking Access,
+6. Investing and Retirement, 
+7. Housing and Real Estate,
+8. Debt,
+9. Health and Financial Barriers,
+10. Financial Literary Self-Perception,
+12. Financial Education History, and
+13. Objective Financial Knowledge.
+
+first column NFCSID appears to be a unique identifier for each observation, next column STATEQ appears to identify the state in which the respondent resides.  Will print and review the data dictionary to understand each variable, rename to user-friendly names, and transform data where needed.
 
 Will take the opportunity to also evaluate which variables might be included in model as response and regressors.
 

@@ -1,0 +1,657 @@
+---
+title: 'Emergency Fund Modeling with NFCS Data: Variable Selection'
+author: "Donnie Minnick"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r, message = FALSE}
+library("dplyr")
+library("knitr")
+library("tidyr")
+source("../R/compute_weighted_stats.R")
+load("../data/nfcs_raw_data.Rdata")
+```
+
+# Initial Data Review
+
+File contains 126 variables for 27,118 observations.  Saved uncleaned and untransformed data as `nfcs_raw_data.Rdata` in the `./data` folder.
+
+To view the structure: 
+
+```{r}
+str(nfcs_raw_data)
+```
+
+All integer values and codes for each variable.
+
+first column NFCSID appears to be a unique identifier for each observation, next column STATEQ appears to identify the state in which the respondent resides.  Will print and review the data dictionary to understand each variable, rename to user-friendly names, and transform data where needed.
+
+Will take the opportunity to also evaluate which variables might be included in model as response and regressors.
+
+Will also review survey methodology to get perspective on how data collection was done; this may inform selection of variables.
+
+Note, can also run stepwise variable selection (forward, backward and exhaustive) to inform decision on model structure.
+
+## Response Variable
+
+Based on my initial review, one variable stands out as a candidate response variable.  Coded as `J5` in the dataset, this variable captures respondent answer to the question, "Have you set aside emergency or rainy day funds that would cover your expenses for 3 months, in case of sickness, job loss, economic downturn, or other emergencies?"
+
+Allowable responses are: 1 = Yes, 2 = No, 98 = Don't Know, and 99 = Prefer Not to Say.
+
+Not sure how a respondent would not know this, and if a respondent did not provide a Yes/No response, presumably I would need to exclude these observations.
+
+Here's how the responses breakdown:
+
+```{r}
+j5 <- nfcs_raw_data %>%
+  select(J5) %>%
+  group_by(J5) %>%
+  summarise(responses = n()) %>%
+  arrange(desc(responses)) %>%
+  mutate(percent = round(responses / sum(responses), 2))
+
+kable(j5,
+      col.names = c("Emergency Fund (J5)", "Responses", "Percent"),
+      caption = "Response Summary by Question",
+      format.args = list(big.mark = ","),
+      align = c("l", "r", "r"))
+```
+
+95% percent of responses are either `Yes` (1) or `No` (2), 3% are `Don't Know` (98) and 1% are `Prefer Not to Say` (99).
+
+I will predict the binary outcome, i.e. whether an individual has an emergency fund (Yes = 1).
+
+Given the binary classification, I propose to start with a logistic regression model over other potential models, e.g. Random Forest, XGBoost, etc.  It's a relatively simple model that is interpretable and may be sufficient to capture the relationship between response and regressors.  If not, then I can move on to other models.
+
+## Non-Responses and Missing Values
+
+First step, evaluate available variables in terms of missing and valid data.
+
+Survey allows 98 = Don't Know, and 99 = Prefer Not to Say responses for all questions.
+
+Will eliminate from consideration variables with high percent of missing values, 98 or 99 responses.
+
+```{r}
+response_summary <- nfcs_raw_data %>%
+  pivot_longer(everything(), 
+               names_to = "variable", 
+               values_to = "response") %>%
+  mutate(response_type = case_when(is.na(response) ~ "missing",
+                                   response == 98 ~ "dk_98",
+                                   response == 99 ~ "pna_99",
+                                   TRUE ~ "valid")) %>%
+  group_by(variable, response_type) %>%
+  summarize(count = n(), .groups = "drop") %>%
+  group_by(variable) %>%
+  mutate(percent = round(count / sum(count), 2)) %>%
+  pivot_wider(names_from = response_type, 
+              values_from = c(count, percent), 
+              values_fill = 0) %>%
+  arrange(count_valid)
+
+kable(response_summary,
+      col.names = c("Variable", 
+                    "Count Missing", 
+                    "Count Valid",
+                    "Count 98",
+                    "Count 99",
+                    "Percent Missing",
+                    "Percent Valid",
+                    "Percent 98",
+                    "Percent 99"),
+      caption = "Response Summary by Question",
+      format.args = list(big.mark = ","),
+      align = c("l", "r", "r", "r", "r", "r", "r", "r", "r"))
+```
+
+## Variable Selection
+
+With 126 variables, I need to take a structured approach to variable selection.
+
+Initial thoughts:
+
+* Start with domain relevance, and manually prefilter variables based on my experience in the retirement industry, with goal of tagging variables that logically influence emergency savings to get from 126 variables to ~30-40.
+* Address missing data.  As I scanned the dataset, I noticed a lot of NAs.  I should consider dropping variables with more than 30-40% missing values, unless they are critical to analysis.  If so, I can consider imputation.
+* Eliminate low-variance features, e.g. 95% of values in a single category.
+* There aren't any open-text responses in this data, but there are multi-categorical data points with levels.  Evaluate and consider dropping these.
+* Once I have a more manageable number of variables, check for multicollinearity to reduce redundancy and drop variables with correlation greater than 0.7 or VIF greater than 4.
+* Use stepwise variable selection to optimize the variable subset.
+
+Realistically, I need to get to 5-8 regressors I can use to predict the response variable.
+
+# Data Categories
+
+Before I get to variable selection, I thought it would be helpful to categorize the variables into groups.  This may guide the variable selection process.
+
+1. Demographics,
+2. Employment,
+3. Income,
+4. Financial Behavior and Decision Making,
+5. Credit and Banking Access,
+6. Investing and Retirement, 
+7. Housing and Real Estate,
+8. Debt,
+9. Health and Financial Barriers,
+10. Financial Literary Self-Perception,
+12. Financial Education History, and
+13. Objective Financial Knowledge.
+
+# Manual Variable Prefilter
+
+I manually prefiltered the variables and landed on 71 candidate variables I want to review.  I eliminated variables that represent a respondent's subjective assessment, i.e. questions that ask about opinion, judgment, confidence, etc.  Perhaps there is value in understanding patterns in self-perception, but for now I put them aside.  Can come back to them later.
+
+# Missing Data and Low-Variance Features
+
+Review variables one at a time.
+
+## Gender
+
+Values: 1 = Male, 2 = Female.
+
+```{r}
+gender <- nfcs_raw_data %>%
+  group_by(A50A) %>%
+  summarize(responses = n()) %>%
+  mutate(percent = round(responses / sum(responses), 2))
+
+kable(gender,
+      col.names = c("Gender (A50A)", "Responses", "Percent"),
+      caption = "Response Summary by Question",
+      format.args = list(big.mark = ","),
+      align = c("l", "r", "r"))
+```
+
+So roughly an even split and no missing data.  Include as regressor.
+
+```{r}
+compute_weighted_stats(gender, "A50A", "responses", binary = TRUE)
+```
+
+## Age Group
+
+Values: 1 = 18-24, 2 = 25-34, 3 = 35-44, 4 = 45-54, 5 = 55-64, 6 = 65+.
+
+```{r}
+age_group <- nfcs_raw_data %>%
+  group_by(A3Ar_w) %>%
+  summarize(responses = n()) %>%
+  mutate(percent = round(responses / sum(responses), 2))
+
+kable(age_group,
+      col.names = c("Age Group (A3Ar_w)", "Responses", "Percent"),
+      caption = "Response Summary by Question",
+      format.args = list(big.mark = ","),
+      align = c("l", "r", "r"))
+```
+
+So roughly an even split, with group 1 (18-24) at 11%, group 6 (65+) at 20%, all others at 17%, and no missing data.  Include as regressor.
+
+```{r}
+compute_weighted_stats(age_group, "A3Ar_w", "responses")
+```
+
+Coefficient of variation is greater than 0.25, so I'll keep the variable and test.
+
+## Ethnicity
+
+Values: 1 = White (non-hispanic), 2 = Non-white.
+
+```{r}
+ethnicity <- nfcs_raw_data %>%
+  group_by(A4A_new_w) %>%
+  summarize(responses = n()) %>%
+  mutate(percent = round(responses / sum(responses), 2))
+
+kable(ethnicity,
+      col.names = c("Ethnicity (A4A_new_w)", "Responses", "Percent"),
+      caption = "Response Summary by Question",
+      format.args = list(big.mark = ","),
+      align = c("l", "r", "r"))
+```
+
+74% white and 26% non-white.  
+
+Concern that this collapses diverse groups into two broad categories.  Also, this variable is likely to be correlated with others, e.g. education, income.  
+
+At a minimum, should check for multicollinearity.  If include, need to be thoughtful about not using the variable in a way that reinforces stereotypes.  
+
+Needs additional evaluation.
+
+```{r}
+compute_weighted_stats(ethnicity, "A4A_new_w", "responses", binary = TRUE)
+```
+
+## Highest Education Level
+
+Values:
+
+1 = Did not complete high school,
+2 = High school graduate - regular high school diploma,
+3 = High school graduate - GED or alternative credential,
+4 = Some college, no degree,
+5 = Associate's degree,
+6 = Bachelor's degree,
+7 = Post graduate degree,
+99 = Prefer not to say.
+
+```{r}
+highest_education_level <- nfcs_raw_data %>%
+  group_by(A5_2015) %>%
+  summarize(responses = n()) %>%
+  mutate(percent = round(responses / sum(responses), 2))
+
+kable(highest_education_level,
+      col.names = c("Education Level (A5_2015)", "Responses", "Percent"),
+      caption = "Response Summary by Question",
+      format.args = list(big.mark = ","),
+      align = c("l", "r", "r"))
+```
+
+Seems like a reasonable distribution, with non-high school graduates potentially underrepresented (group 1).  No missing data.
+
+Perhaps assess how well this distribution aligns to other sources?  Important reference point.
+
+Include.
+
+```{r}
+compute_weighted_stats(highest_education_level, "A5_2015", "responses")
+```
+
+## Marital Status
+
+Values:
+
+1 = Married,
+2 = Single,
+3 = Separated,
+4 = Divorced,
+5 = Widowed/widower,
+99 = Prefer not to say.
+
+```{r}
+marital_status <- nfcs_raw_data %>%
+  group_by(A6) %>%
+  summarize(responses = n()) %>%
+  mutate(percent = round(responses / sum(responses), 2))
+
+kable(marital_status,
+      col.names = c("Marital Status (A6)", "Responses", "Percent"),
+      caption = "Response Summary by Question",
+      format.args = list(big.mark = ","),
+      align = c("l", "r", "r"))
+```
+
+Expected to see higher proportion of separated/divorced respondents (groups 3 and 4); only 13%?  Everything else looks reasonable.  No missing data.
+
+Confirm whether groups 3 and 4 are underrepresented.  Important reference point.
+
+Include.
+
+```{r}
+compute_weighted_stats(marital_status, "A6", "responses")
+```
+
+## Current Living Arrangement
+
+Values:
+
+1 = I am only adult in the household,
+2 = I live with my spouse/partner/significant other,
+3 = I live in my parents' home,
+4 = I live with other family, friends, or roommates,
+99 = Prefer not to say.
+
+```{r}
+current_living_arrangement <- nfcs_raw_data %>%
+  group_by(A7) %>%
+  summarize(responses = n()) %>%
+  mutate(percent = round(responses / sum(responses), 2))
+
+kable(current_living_arrangement,
+      col.names = c("Living Arrangement (A7)", "Responses", "Percent"),
+      caption = "Response Summary by Question",
+      format.args = list(big.mark = ","),
+      align = c("l", "r", "r"))
+```
+
+No missing data.  Include.
+
+Comparison to population as a whole?  Verify?
+
+```{r}
+compute_weighted_stats(current_living_arrangement, "A7", "responses")
+```
+
+## Number Dependent Children
+
+Values:
+
+1 = 1,
+2 = 2,
+3 = 3,
+4 = 4 or more,
+5 = No financially dependent children,
+6 = Do not have any children,
+99 = Prefer not to say.
+
+```{r}
+number_dependent_children <- nfcs_raw_data %>%
+  group_by(A11) %>%
+  summarize(responses = n()) %>%
+  mutate(percent = round(responses / sum(responses), 2))
+
+kable(number_dependent_children,
+      col.names = c("Children (A11)", "Responses", "Percent"),
+      caption = "Response Summary by Question",
+      format.args = list(big.mark = ","),
+      align = c("l", "r", "r"))
+```
+
+No missing data.  Include.
+
+Representative of population as a whole?  Verify?
+
+```{r}
+compute_weighted_stats(number_dependent_children, "A11", "responses")
+```
+
+## Annual Income
+
+Values:
+
+1 = Less than $15,000,
+2 = At least $15,000 but less than $25,000,
+3 = At least $25,000 but less than $35,000,
+4 = At least $35,000 but less than $50,000,
+5 = At least $50,000 but less than $75,000,
+6 = At least $75,000 but less than $100,000,
+7 = At least $100,000 but less than $150,000,
+8 = At least $150,000 but less than $200,000,
+9 = At least $200,000 but less than $300,000,
+10 = $300,000 or more,
+98 = Don't know,
+99 = Prefer not to say.
+
+```{r}
+annual_income <- nfcs_raw_data %>%
+  group_by(A8_2021) %>%
+  summarize(responses = n()) %>%
+  mutate(percent = round(responses / sum(responses), 2))
+
+kable(annual_income,
+      col.names = c("Annual Income (A8_2021)", "Responses", "Percent"),
+      caption = "Response Summary by Question",
+      format.args = list(big.mark = ","),
+      align = c("l", "r", "r"))
+```
+
+No missing data.  Include.
+
+Representative of population as a whole?  Verify?
+
+```{r}
+compute_weighted_stats(annual_income, "A8_2021", "responses")
+```
+
+## Current Employment Status
+
+Values:
+
+1 = Self-employed,
+2 = Work full-time for an employer [or the military],
+3 = Work part-time for an employer [or the military],
+4 = Homemaker,
+5 = Full-time student,
+6 = Permanently sick, disabled, or unable to work,
+7 = Unemployed or temporarily laid off,
+8 = Retired,
+99 = Prefer not to say.
+
+```{r}
+current_employment_status <- nfcs_raw_data %>%
+  group_by(A9) %>%
+  summarize(responses = n()) %>%
+  mutate(percent = round(responses / sum(responses), 2))
+
+kable(current_employment_status,
+      col.names = c("Current Employment (A9)", "Responses", "Percent"),
+      caption = "Response Summary by Question",
+      format.args = list(big.mark = ","),
+      align = c("l", "r", "r"))
+```
+
+Seems reasonable; include.
+
+```{r}
+compute_weighted_stats(current_employment_status, "A9", "responses")
+```
+
+
+## Partner Employment Status
+
+Values:
+
+1 = Self-employed,
+2 = Work full-time for an employer [or the military],
+3 = Work part-time for an employer [or the military],
+4 = Homemaker,
+5 = Full-time student,
+6 = Permanently sick, disabled, or unable to work,
+7 = Unemployed or temporarily laid off,
+8 = Retired,
+99 = Prefer not to say.
+
+```{r}
+partner_employment_status <- nfcs_raw_data %>%
+  group_by(A10) %>%
+  summarize(responses = n()) %>%
+  mutate(percent = round(responses / sum(responses), 2))
+
+kable(partner_employment_status,
+      col.names = c("Partner Employment (A10)", "Responses", "Percent"),
+      caption = "Response Summary by Question",
+      format.args = list(big.mark = ","),
+      align = c("l", "r", "r"))
+```
+
+Missing values are presumably for respondents that do not live with a spouse, partner, etc.
+
+```{r}
+compute_weighted_stats(na.omit(partner_employment_status), "A10", "responses")
+```
+
+## Part-Time Student
+
+Values:
+
+1 = Yes,
+2 = No, 
+3 = Don't know,
+4 = Prefer not to say.
+
+```{r}
+part_time_student <- nfcs_raw_data %>%
+  group_by(A21_2015) %>%
+  summarize(responses = n()) %>%
+  mutate(percent = round(responses / sum(responses), 2))
+
+kable(part_time_student,
+      col.names = c("Part-Time Student (A21_2015)", "Responses", "Percent"),
+      caption = "Response Summary by Question",
+      format.args = list(big.mark = ","),
+      align = c("l", "r", "r"))
+```
+
+Missing values are presumably for respondents that did not respond positively, i.e. non-response = no.
+
+```{r}
+compute_weighted_stats(na.omit(part_time_student), "A21_2015", "responses")
+```
+
+## Saving For College
+
+Values:
+
+1 = Yes,
+2 = No,
+98 = Don't know,
+99 = Prefer not to say.
+
+```{r}
+saving_for_college <- nfcs_raw_data %>%
+  group_by(J6) %>%
+  summarize(responses = n()) %>%
+  mutate(percent = round(responses / sum(responses), 2))
+
+kable(saving_for_college,
+      col.names = c("Saving For College (J6)", "Responses", "Percent"),
+      caption = "Response Summary by Question",
+      format.args = list(big.mark = ","),
+      align = c("l", "r", "r"))
+```
+
+
+
+```{r}
+compute_weighted_stats(na.omit(saving_for_college), "J6", "responses")
+```
+
+## Unexpected Income Drop
+
+Values:
+
+1 = Yes,
+2 = No,
+98 = Don't know,
+99 = Prefer not to say.
+
+```{r}
+unexpected_income_drop <- nfcs_raw_data %>%
+  group_by(J10) %>%
+  summarize(responses = n()) %>%
+  mutate(percent = round(responses / sum(responses), 2))
+
+kable(unexpected_income_drop,
+      col.names = c("Unexpected Income Drop (J10)", "Responses", "Percent"),
+      caption = "Response Summary by Question",
+      format.args = list(big.mark = ","),
+      align = c("l", "r", "r"))
+```
+
+
+
+```{r}
+compute_weighted_stats(unexpected_income_drop, "J10", "responses")
+```
+
+## Pandemic Layoff
+
+Values:
+
+1 = Yes,
+2 = No/not applicable,
+98 = Don't know,
+99 = Prefer not to say.
+
+```{r}
+pandemic_layoff <- nfcs_raw_data %>%
+  group_by(J52) %>%
+  summarize(responses = n()) %>%
+  mutate(percent = round(responses / sum(responses), 2))
+
+kable(pandemic_layoff,
+      col.names = c("Pandemic Layoff (J52)", "Responses", "Percent"),
+      caption = "Response Summary by Question",
+      format.args = list(big.mark = ","),
+      align = c("l", "r", "r"))
+```
+
+```{r}
+compute_weighted_stats(pandemic_layoff, "J52", "responses")
+```
+
+## Checking Account
+
+Values:
+
+1 = Yes,
+2 = No,
+98 = Don't know,
+99 = Prefer not to say.
+
+```{r}
+have_checking_account <- nfcs_raw_data %>%
+  group_by(B1) %>%
+  summarize(responses = n()) %>%
+  mutate(percent = round(responses / sum(responses), 2))
+
+kable(have_checking_account,
+      col.names = c("Checking Account (B1)", "Responses", "Percent"),
+      caption = "Response Summary by Question",
+      format.args = list(big.mark = ","),
+      align = c("l", "r", "r"))
+```
+
+
+
+```{r}
+compute_weighted_stats(have_checking_account, "B1", "responses")
+```
+
+## Have Savings Account
+
+Values: 
+
+1 = Yes,
+2 = No,
+98 = Don't know,
+99 = Prefer not to say.
+
+```{r}
+have_savings_account <- nfcs_raw_data %>%
+  group_by(B2) %>%
+  summarize(responses = n()) %>%
+  mutate(percent = round(responses / sum(responses), 2))
+
+kable(have_savings_account,
+      col.names = c("Savings Account (B2)", "Responses", "Percent"),
+      caption = "Response Summary by Question",
+      format.args = list(big.mark = ","),
+      align = c("l", "r", "r"))
+```
+
+
+
+```{r}
+compute_weighted_stats(have_savings_account, "B2", "responses")
+```
+
+## Overdraw Checking
+
+Values:
+
+1 = Yes,
+2 = No,
+98 = Don't know,
+99 = Prefer not to say.
+
+```{r}
+overdraw_checking <- nfcs_raw_data %>%
+  group_by(B4) %>%
+  summarize(responses = n()) %>%
+  mutate(percent = round(responses / sum(responses), 2))
+
+kable(overdraw_checking,
+      col.names = c("Overdraw Checking (B4)", "Responses", "Percent"),
+      caption = "Response Summary by Question",
+      format.args = list(big.mark = ","),
+      align = c("l", "r", "r"))
+```
+
+```{r}
+compute_weighted_stats(na.omit(overdraw_checking), "B4", "responses")
+```
+
